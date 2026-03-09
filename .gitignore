@@ -1,0 +1,24 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Database
+data/*.db
+data/*.json
+data/export.xml
+
+# IDE
+.vscode/
+.idea/
+
+# Node (for future React frontend)
+node_modules/
+frontend/dist/
+frontend/.env

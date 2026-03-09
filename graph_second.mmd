@@ -1,0 +1,48 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	history_node(history_node)
+	physical_exam_node(physical_exam_node)
+	contributing_conditions_node(contributing_conditions_node)
+	frailty_detection_node(frailty_detection_node)
+	save_assessment_node[(save_assessment_node\nSQLite DB)]:::db
+	chat_node(chat_node\nHealth Coach\n+ Tool Calling):::chat
+	conversation_db[(conversations\nSQLite DB)]:::db
+	tool_education(get_education_plan\ntool):::tool
+	tool_exercise(get_exercise_plan\ntool):::tool
+	tool_sleep(get_sleep_plan\ntool):::tool
+	tool_monitoring(get_monitoring_plan\ntool):::tool
+	__end__([<p>__end__</p>]):::last
+
+	__start__ --> history_node;
+	history_node --> physical_exam_node;
+	physical_exam_node --> contributing_conditions_node;
+	contributing_conditions_node --> frailty_detection_node;
+	frailty_detection_node --> save_assessment_node;
+	save_assessment_node --> chat_node;
+	chat_node <-->|persist each turn| conversation_db;
+	conversation_db -.->|resume on login| chat_node;
+	chat_node -.->|patient asks about education| tool_education;
+	chat_node -.->|patient asks about exercise| tool_exercise;
+	chat_node -.->|patient asks about sleep| tool_sleep;
+	chat_node -.->|patient asks about monitoring| tool_monitoring;
+	tool_education -->|plan returned| chat_node;
+	tool_exercise -->|plan returned| chat_node;
+	tool_sleep -->|plan returned| chat_node;
+	tool_monitoring -->|plan returned| chat_node;
+	tool_education -.->|generate & save| save_assessment_node;
+	tool_exercise -.->|generate & save| save_assessment_node;
+	tool_sleep -.->|generate & save| save_assessment_node;
+	tool_monitoring -.->|generate & save| save_assessment_node;
+	chat_node -->|exit / quit| __end__;
+
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+	classDef db fill:#d4edda,stroke:#28a745,shape:cylinder
+	classDef chat fill:#cce5ff,stroke:#004085
+	classDef tool fill:#fde8d8,stroke:#e8610a

@@ -1,0 +1,19 @@
+# Core LLM & Agent framework
+langchain-core>=0.3.0
+langgraph>=0.2.0
+
+# LLM providers (install the ones you need)
+langchain-anthropic>=0.3.0       # Claude  — requires ANTHROPIC_API_KEY
+langchain-openai>=0.2.0          # OpenAI  — requires OPENAI_API_KEY
+langchain-google-genai>=2.0.0    # Gemini  — requires GOOGLE_API_KEY
+
+# Database
+sqlalchemy>=2.0.0
+
+# Data validation
+pydantic>=2.0.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+pandas

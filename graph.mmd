@@ -1,0 +1,45 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	history_node(history_node)
+	physical_exam_node(physical_exam_node)
+	contributing_conditions_node(contributing_conditions_node)
+	frailty_detection_node(frailty_detection_node)
+	management_router_node(management_router_node):::router
+	education_node(education_node)
+	exercise_node(exercise_node)
+	sleep_node(sleep_node)
+	monitoring_node(monitoring_node)
+	save_assessment[(save_assessment\nSQLite DB)]:::db
+	chat_agent(chat_agent\nHealth Coach):::chat
+	conversation_db[(conversations\nSQLite DB)]:::db
+	__end__([<p>__end__</p>]):::last
+
+	__start__ --> history_node;
+	history_node --> physical_exam_node;
+	physical_exam_node --> contributing_conditions_node;
+	contributing_conditions_node --> frailty_detection_node;
+	frailty_detection_node --> management_router_node;
+	management_router_node -.-> education_node;
+	management_router_node -.-> exercise_node;
+	management_router_node -.-> sleep_node;
+	management_router_node -.-> monitoring_node;
+	education_node --> save_assessment;
+	exercise_node --> save_assessment;
+	sleep_node --> save_assessment;
+	monitoring_node --> save_assessment;
+	save_assessment --> chat_agent;
+	chat_agent <-->|persist each turn| conversation_db;
+	chat_agent -->|exit / quit| __end__;
+	conversation_db -.->|resume on login| chat_agent;
+
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+	classDef router fill:#fff3cd,stroke:#f0ad4e
+	classDef db fill:#d4edda,stroke:#28a745,shape:cylinder
+	classDef chat fill:#cce5ff,stroke:#004085
