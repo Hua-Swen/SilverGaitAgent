@@ -114,6 +114,8 @@ def run_contributing_conditions_agent(
 
     try:
         data = json.loads(_strip_json_fences(extraction_response.content))
+        if isinstance(data, list):
+            data = data[0]
         assessment.contributing = ContributingConditionsScore(
             cognitive_risk=data["cognitive_risk"],
             mood_risk=data["mood_risk"],

@@ -9,8 +9,8 @@ Graph flow:
     → physical_exam_node
     → contributing_conditions_node
     → frailty_detection_node
-    → management_router_node          ← LLM decides which agents are needed
-    → [conditional] management nodes (education, exercise, sleep, monitoring)
+    → save_assessment_node          ← persists assessment to SQLite
+    → chat_node                     ← interactive health coach with tool calling
   END
 """
 
@@ -27,11 +27,6 @@ from backend.agents import (
     run_physical_exam_agent,
     run_contributing_conditions_agent,
     run_frailty_detection_agent,
-    run_management_router_agent,
-    run_physical_education_agent,
-    run_exercise_agent,
-    run_sleep_agent,
-    run_monitoring_agent,
 )
 
 
@@ -52,10 +47,8 @@ def _print_node_done(label: str, elapsed: float) -> None:
 
 def _merge_assessment(current: Assessment, update: Assessment) -> Assessment:
     """
-    Merge reducer for Assessment.  Safe for parallel management nodes: each
-    node only populates its own field (education_plan / exercise_plan / etc.),
-    so non-None fields from `update` are layered on top of `current` without
-    clobbering work done by sibling nodes.
+    Merge reducer for Assessment.  Non-None fields from `update` are layered
+    on top of `current` without clobbering existing values.
     """
     merged = current.model_dump()
     for k, v in update.model_dump().items():
@@ -76,7 +69,7 @@ class AgentState(TypedDict):
 # --- Node functions ---
 
 def history_node(state: AgentState) -> AgentState:
-    _print_node_banner("1 of 9", "HISTORY AGENT", "Collecting functional history → CFS score + Katz ADL score")
+    _print_node_banner("1 of 6", "HISTORY AGENT", "Collecting functional history → CFS score + Katz ADL score")
     t = time.time()
     assessment = run_history_agent(
         patient=state["patient"],
@@ -88,7 +81,7 @@ def history_node(state: AgentState) -> AgentState:
 
 
 def physical_exam_node(state: AgentState) -> AgentState:
-    _print_node_banner("2 of 9", "PHYSICAL EXAM AGENT", "SPPB assessment → balance, gait speed, chair stand scores")
+    _print_node_banner("2 of 6", "PHYSICAL EXAM AGENT", "SPPB assessment → balance, gait speed, chair stand scores")
     t = time.time()
     assessment = run_physical_exam_agent(
         patient=state["patient"],
@@ -100,7 +93,7 @@ def physical_exam_node(state: AgentState) -> AgentState:
 
 
 def contributing_conditions_node(state: AgentState) -> AgentState:
-    _print_node_banner("3 of 9", "CONTRIBUTING CONDITIONS AGENT", "Screening cognitive, mood, sleep, and social isolation risk")
+    _print_node_banner("3 of 6", "CONTRIBUTING CONDITIONS AGENT", "Screening cognitive, mood, sleep, and social isolation risk")
     t = time.time()
     assessment = run_contributing_conditions_agent(
         patient=state["patient"],
@@ -112,7 +105,7 @@ def contributing_conditions_node(state: AgentState) -> AgentState:
 
 
 def frailty_detection_node(state: AgentState) -> AgentState:
-    _print_node_banner("4 of 9", "FRAILTY DETECTION AGENT", "Combining scores → frailty tier classification + routing decision")
+    _print_node_banner("4 of 6", "FRAILTY DETECTION AGENT", "Combining scores → frailty tier classification")
     t = time.time()
     assessment = run_frailty_detection_agent(
         patient=state["patient"],
@@ -123,94 +116,27 @@ def frailty_detection_node(state: AgentState) -> AgentState:
     return {**state, "assessment": assessment, "completed_nodes": ["frailty_detection"]}
 
 
-def management_router_node(state: AgentState) -> AgentState:
-    _print_node_banner("5 of 9", "MANAGEMENT ROUTER AGENT", "Reviewing clinical summary → selecting personalised management pathways")
+def save_assessment_node(state: AgentState) -> AgentState:
+    from backend.database.db import save_assessment
+    _print_node_banner("5 of 6", "SAVE ASSESSMENT", "Persisting assessment results to SQLite")
     t = time.time()
-    assessment = run_management_router_agent(
+    assessment = save_assessment(state["assessment"])
+    _print_node_done("Save Assessment", time.time() - t)
+    return {**state, "assessment": assessment, "completed_nodes": ["saved"]}
+
+
+def chat_node(state: AgentState) -> AgentState:
+    from backend.database.db import get_conversation
+    from backend.agents.chat_agent import run_chat_session
+    _print_node_banner("6 of 6", "HEALTH COACH", "Starting interactive coaching session with tool calling")
+    history = get_conversation(state["patient"].id)
+    run_chat_session(
         patient=state["patient"],
         assessment=state["assessment"],
         llm=state["llm"],
+        history=history,
     )
-    _print_node_done("Management Router Agent", time.time() - t)
-    return {**state, "assessment": assessment, "completed_nodes": ["management_router"]}
-
-
-def education_node(state: AgentState) -> dict:
-    _print_node_banner("6 of 9", "PHYSICAL EDUCATION AGENT", "Generating personalised frailty education + fall prevention plan")
-    t = time.time()
-    assessment = run_physical_education_agent(
-        patient=state["patient"],
-        assessment=state["assessment"],
-        llm=state["llm"],
-    )
-    _print_node_done("Physical Education Agent", time.time() - t)
-    return {"assessment": assessment, "completed_nodes": ["education"]}
-
-
-def exercise_node(state: AgentState) -> dict:
-    _print_node_banner("7 of 9", "EXERCISE AGENT", "Building 4-week personalised exercise program")
-    t = time.time()
-    assessment = run_exercise_agent(
-        patient=state["patient"],
-        assessment=state["assessment"],
-        llm=state["llm"],
-    )
-    _print_node_done("Exercise Agent", time.time() - t)
-    return {"assessment": assessment, "completed_nodes": ["exercise"]}
-
-
-def sleep_node(state: AgentState) -> dict:
-    _print_node_banner("8 of 9", "SLEEP AGENT", "Generating sleep hygiene plan + CBT-I interventions")
-    t = time.time()
-    assessment = run_sleep_agent(
-        patient=state["patient"],
-        assessment=state["assessment"],
-        llm=state["llm"],
-    )
-    _print_node_done("Sleep Agent", time.time() - t)
-    return {"assessment": assessment, "completed_nodes": ["sleep"]}
-
-
-def monitoring_node(state: AgentState) -> dict:
-    _print_node_banner("9 of 9", "MONITORING AGENT", "Analysing 30-day Apple Health trends + generating follow-up plan")
-    t = time.time()
-    assessment = run_monitoring_agent(
-        patient=state["patient"],
-        assessment=state["assessment"],
-        llm=state["llm"],
-    )
-    _print_node_done("Monitoring Agent", time.time() - t)
-    return {"assessment": assessment, "completed_nodes": ["monitoring"]}
-
-
-# --- Conditional routing ---
-
-def route_management(state: AgentState) -> list[str]:
-    """
-    Translate management_routes set by the Management Router Agent into graph node names.
-    Falls back to all four agents if the router produced no output.
-    """
-    chosen = state["assessment"].management_routes or ["education", "exercise", "sleep", "monitoring"]
-
-    agent_to_node = {
-        "education": "education_node",
-        "exercise": "exercise_node",
-        "sleep": "sleep_node",
-        "monitoring": "monitoring_node",
-    }
-
-    routes = [agent_to_node[a] for a in chosen if a in agent_to_node]
-
-    if not routes:
-        routes = list(agent_to_node.values())
-
-    readable = [r.replace("_node", "").title() for r in routes]
-    all_agents = {"Education", "Exercise", "Sleep", "Monitoring"}
-    skipped = all_agents - set(readable)
-    print(f"\n[GRAPH] Activating: {', '.join(readable)}")
-    print(f"[GRAPH] Skipped   : {', '.join(skipped) or 'none'}")
-
-    return routes
+    return {**state, "completed_nodes": ["chat"]}
 
 
 # --- Build graph ---
@@ -224,47 +150,26 @@ def build_graph() -> StateGraph:
     graph.add_node("contributing_conditions_node", contributing_conditions_node)
     graph.add_node("frailty_detection_node", frailty_detection_node)
 
-    # Management router node
-    graph.add_node("management_router_node", management_router_node)
+    # Save + chat nodes
+    graph.add_node("save_assessment_node", save_assessment_node)
+    graph.add_node("chat_node", chat_node)
 
-    # Management layer nodes
-    graph.add_node("education_node", education_node)
-    graph.add_node("exercise_node", exercise_node)
-    graph.add_node("sleep_node", sleep_node)
-    graph.add_node("monitoring_node", monitoring_node)
-
-    # Assessment layer edges (sequential)
+    # Linear edges
     graph.set_entry_point("history_node")
     graph.add_edge("history_node", "physical_exam_node")
     graph.add_edge("physical_exam_node", "contributing_conditions_node")
     graph.add_edge("contributing_conditions_node", "frailty_detection_node")
-    graph.add_edge("frailty_detection_node", "management_router_node")
-
-    # Conditional routing after management router
-    graph.add_conditional_edges(
-        "management_router_node",
-        route_management,
-        {
-            "education_node": "education_node",
-            "exercise_node": "exercise_node",
-            "sleep_node": "sleep_node",
-            "monitoring_node": "monitoring_node",
-        },
-    )
-
-    # All management nodes → END
-    graph.add_edge("education_node", END)
-    graph.add_edge("exercise_node", END)
-    graph.add_edge("sleep_node", END)
-    graph.add_edge("monitoring_node", END)
+    graph.add_edge("frailty_detection_node", "save_assessment_node")
+    graph.add_edge("save_assessment_node", "chat_node")
+    graph.add_edge("chat_node", END)
 
     return graph
 
 
-def run_full_assessment(patient: Patient, llm: BaseChatModel) -> Assessment:
+def run_full_assessment(patient: Patient, llm: BaseChatModel) -> None:
     """
-    Run the complete frailty assessment workflow for a patient.
-    Returns the fully populated Assessment object.
+    Run the complete frailty assessment workflow for a patient,
+    including saving the assessment and launching the coaching chat.
     """
     assessment = Assessment(patient_id=patient.id)
 
@@ -294,5 +199,3 @@ def run_full_assessment(patient: Patient, llm: BaseChatModel) -> Assessment:
     print(f"  Nodes run: {', '.join(completed)}")
     print(f"  Frailty tier: {final_state['assessment'].frailty_tier or 'not classified'}")
     print(f"{'=' * 60}\n")
-
-    return final_state["assessment"]

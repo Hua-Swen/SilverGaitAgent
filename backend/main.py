@@ -11,7 +11,6 @@ from backend.database.db import (
     create_patient,
     get_patient,
     list_patients,
-    save_assessment,
     get_assessments_for_patient,
     get_conversation,
 )
@@ -185,12 +184,7 @@ def main():
             patient = create_patient(patient)
             print(f"\n✓ Patient registered: {patient.name} (ID: {patient.id})")
             print("\nStarting full assessment workflow...")
-            assessment = run_full_assessment(patient=patient, llm=llm)
-            assessment = save_assessment(assessment)
-            print(f"\n✓ Assessment saved (ID: {assessment.id})")
-            # Enter coaching chat with a fresh conversation
-            history = get_conversation(patient.id)
-            run_chat_session(patient=patient, assessment=assessment, llm=llm, history=history)
+            run_full_assessment(patient=patient, llm=llm)
 
         elif choice == "2":
             patient = select_patient()
@@ -208,11 +202,7 @@ def main():
             else:
                 # No completed assessment yet — run one, then chat
                 print(f"\nNo completed assessment found for {patient.name}. Running full assessment...")
-                assessment = run_full_assessment(patient=patient, llm=llm)
-                assessment = save_assessment(assessment)
-                print(f"\n✓ Assessment saved (ID: {assessment.id})")
-                history = get_conversation(patient.id)
-                run_chat_session(patient=patient, assessment=assessment, llm=llm, history=history)
+                run_full_assessment(patient=patient, llm=llm)
 
         elif choice == "3":
             patient = select_patient()
